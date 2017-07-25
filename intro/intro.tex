@@ -127,10 +127,11 @@ GPU Computing can do many things much faster than the CPU; however, there are a 
 \begin{tabular}{c | c | c}
 & CPU & GPU \\
 \hline
-Memory & unlimited & ~12GB \\
+Memory & 128GB & ~12GB \\
 & & \\
 Parallelization & afterthought & natural \\
 & OpenMP, MPI & CUDA, OpenCL...\\
+Boilerplate & a little & a lot\\
 
 \end{tabular}
 \end{center}
@@ -138,40 +139,80 @@ Parallelization & afterthought & natural \\
 
 \begin{frame}
 \frametitle{Parallelization}
-\end{frame}
-
-\begin{frame}
-\frametitle{Examples}
+\begin{columns}
+\column{0.5\textwidth}
+In most GPU simulations, data is parsed into \textbf{threads}(work-item), \textbf{blocks}(work-group), and a \textbf{grid}(NDRange).
+\begin{itemize}
+\item Threads have fast \textit{shared memory} within a block.
+\item Data parallelism within a block
+\end{itemize} 
+\column{0.5\textwidth}
+\begin{center}
+\includegraphics[width=\textwidth]{GBT.png}
+\end{center}
+\end{columns}
 \end{frame}
 
 \begin{frame}
 \frametitle{Hardware}
 There are two major vendors for GPU's: 
 \begin{description}
-\item[AMD] ``Open'' computing
-\item[nVidia] ``Industry standard'' for GPU computing. 
+\item[AMD] ``Open'' computing (Must use \textbf{OpenCL})
+\item[nVidia] ``Industry standard'' for GPU computing (can use \textbf{OpenCL} or \textbf{CUDA}). 
 \end{description}
 
 For the most part, these follow trends you hear about in gaming: nVidia trail-blazes and AMD keeps up; however, this is not necessarily true with recent cards.
+
+\vspace{0.5cm}
+
+OpenCL and CUDA are comparable in performance, though CUDA has more robust libraries.
 \end{frame}
 
 \begin{frame}
 \frametitle{CUDA}
+\vspace{-0.5cm}
 
 CUDA (once Compute Unified Device Architecture) is the standard programming language to use for GPGPU computing and boasts speed and performance; however, it only works on nVidia cards.
+
+\vspace{0.5cm}
+In GPU computing, functions are called \texttt{kernels}:
+\begin{description}
+\item [\texttt{\_\_global\_\_}] May be called from the host or device
+\item [\texttt{\_\_device\_\_}] Must be called from the device
+\item [\texttt{\_\_host\_\_}] Is just a normal function
+\end{description}
+
+There are also a bunch of CUDA-specific functions(\texttt{cudaMalloc}, \texttt{cudaMemcpy}, \texttt{cudaFree}, etc...)
+
+\vspace{0.5cm}
+A quick example of vector addition can be found in the git repo under \texttt{intro/CUDA}
+
 \end{frame}
 
 \begin{frame}
 \frametitle{CUDAnative.jl}
-This is a julia implementation of CUDA and will be developed further in the future. It is much easier to use than CUDA and works well with most Julia code.
+This is a julia implementation of CUDA and will be developed further in the future. 
+
+\begin{itemize}
+\item It is much easier to use than CUDA and works well with most Julia code.
+\item It is incomplete and hard to build
+\item More informationa can be found here: \url{http://juliagpu.github.io/CUDAnative.jl/stable/man/usage.html}
+\end{itemize}
+
 \end{frame}
 
 \begin{frame}
 \frametitle{OpenCL}
 
+OpenCL is the Open Computing Language created by Khronos (OpenGL, Vulkan) and...
+
 \begin{itemize}
-\item OpenCL follows similar notation to OpenGL. In OpenGL, shaders are read in as strings, but in OpenCL, kernels are read in as strings
+\item Follows similar notation to OpenGL. In OpenGL, shaders are read in as strings, but in OpenCL, kernels are read in as strings
+\item Allows users to use all hardware on their computer in the same language, including CPU, GPU, FPGA, etc...
+\item Also allows for OpenGL interoperability for visualizations
 \end{itemize}
+
+A quick example of vector addition can be found in the git repo under \texttt{intro/OpenCL}
 \end{frame}
 
 \begin{frame}[fragile]
@@ -186,7 +227,7 @@ squeue -p gpu
 and can access a GPU node (interactively) with
 
 \begin{lstlisting}
-srun ... 
+srun --partition=gpu --gres=gpu:1 --pty /bin/bash
 \end{lstlisting}
 
 Once you have access, you can check each GPU with \texttt{nvidia-smi}
