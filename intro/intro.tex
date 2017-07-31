@@ -227,7 +227,7 @@ squeue -p gpu
 and can access a GPU node (interactively) with
 
 \begin{lstlisting}
-srun --partition=gpu --gres=gpu:1 --pty /bin/bash
+srun --partition=gpu --gres=gpu:1 ./a.out
 \end{lstlisting}
 
 Once you have access, you can check each GPU with \texttt{nvidia-smi}
