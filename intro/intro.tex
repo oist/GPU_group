@@ -227,6 +227,7 @@ squeue -p gpu
 and can access a GPU node (interactively) with
 
 \begin{lstlisting}
+srun g++ vec_add.cpp -I/apps/free/cuda/8.0.27/include -L/apps/free/cuda/8.0.27/lib64 -lOpenCL
 srun --partition=gpu --gres=gpu:1 a.out
 \end{lstlisting}
 
