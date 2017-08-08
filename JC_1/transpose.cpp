@@ -20,35 +20,16 @@
 #define BLOCK 8
 
 // Function to test the copy kernel
-double *test_copy(double *array, int width, int height);
+int *test_copy(int *array, int width, int height);
 
 // Function to test the transpose kernel
-double *test_transpose(double *array, int width, int height);
+int *test_transpose(int *array, int width, int height);
 
 // Function to print an array
-void print_array(double *array, int width, int height);
+void print_array(int *array, int width, int height);
 
 // Function to open a file and return a const char *
 const char *open_file(std::string filename);
-
-/*
-const char *copy_kernel = "\n" \
-"#pragma OPENCL EXTENSION cl_khr_fp64 : enable \n" \
-"__kernel void copy2d(__global double *in, __global double *out, \n" \
-                     "const unsigned int width, const unsigned int height \n" \
-                     "const unsigned int tile, const unsigned int block_rows){ \n" \
-    "// Global Thread ID \n" \
-    "int xid = get_global_id(0); \n" \
-    "int yid = get_global_id(1); \n" \
-" \n" \
-    "int index = xid + width*yid; \n" \
-    "for (int i = 0; i < tile;  i+=block_rows){ \n" \
-        "out[index + i*width] = in[index + i*width]; \n" \
-    "} \n" \
-" \n" \
-"} \n" \
-" \n" ;
-*/
 
 /*----------------------------------------------------------------------------//
 * MAIN
@@ -58,7 +39,7 @@ const char *copy_kernel = "\n" \
 int main(){
 
     // Creating 32x32 array to mess around with
-    double array[32*32];
+    int array[32*32];
     for (int i = 0; i < 32*32; i++){
         if (i % 2 == 0){
             array[i] = 0.0;
@@ -68,12 +49,20 @@ int main(){
         }
     }
 
+    std::cout << "ORIGINAL ARRAY:\n";
     print_array(array, 32, 32);
 
     std::cout << "\n\n";
 
-    double *copied_array = test_copy(array, 32, 32);
+    int *copied_array = test_copy(array, 32, 32);
+    std::cout << "COPIED ARRAY:\n";
     print_array(copied_array, 32, 32);
+    std::cout << "\n\n";
+
+    int *transposed_array = test_transpose(array, 32, 32);
+    std::cout << "TRANSPOSED ARRAY:\n";
+    print_array(transposed_array, 32, 32);
+    std::cout << "\n\n";
     
 }
 
@@ -83,10 +72,10 @@ int main(){
 *-----------------------------------------------------------------------------*/
 
 // Function to test the copy kernel
-double *test_copy(double *array, int width, int height){
+int *test_copy(int *array, int width, int height){
 
-    double *out;
-    out = new double[width*height];
+    int *out;
+    out = new int[width*height];
 
     cl::Buffer d_out, d_in;
     cl_int err = CL_SUCCESS;
@@ -110,18 +99,17 @@ double *test_copy(double *array, int width, int height){
 
         // Creating device memory buffer
         d_in = cl::Buffer(context, CL_MEM_READ_ONLY, 
-                          width*height*sizeof(double));
+                          width*height*sizeof(int));
         d_out = cl::Buffer(context, CL_MEM_WRITE_ONLY, 
-                           width*height*sizeof(double));
+                           width*height*sizeof(int));
 
         // Bind memory buffer
-        queue.enqueueWriteBuffer(d_in, CL_TRUE, 0, width*height*sizeof(double),
+        queue.enqueueWriteBuffer(d_in, CL_TRUE, 0, width*height*sizeof(int),
                                  array);
 
         // now to read in the kernel
         const char *copy_kernel = open_file("copy2d.cl");
 
-        std::cout << copy_kernel << '\n';
         cl::Program::Sources source(1, 
             std::make_pair(copy_kernel, strlen(copy_kernel)));
 
@@ -141,9 +129,9 @@ double *test_copy(double *array, int width, int height){
         kernel.setArg(5,BLOCK);
 
         // Number of work-items
-        cl::NDRange localSize(64);
+        cl::NDRange localSize(256);
 
-        cl::NDRange globalSize((int)(ceil(width*height/(float)64)*64));
+        cl::NDRange globalSize((int)(ceil(width*height/(float)256)*256));
 
         cl::Event event;
         queue.enqueueNDRangeKernel(
@@ -157,7 +145,7 @@ double *test_copy(double *array, int width, int height){
 
         event.wait();
 
-        queue.enqueueReadBuffer(d_out, CL_TRUE, 0, width*height*sizeof(double),
+        queue.enqueueReadBuffer(d_out, CL_TRUE, 0, width*height*sizeof(int),
                                 out);
 
         
@@ -172,11 +160,96 @@ double *test_copy(double *array, int width, int height){
 }
 
 // Function to test the transpose kernel
-double *test_transpose(double *array, int width, int height){
+int *test_transpose(int *array, int width, int height){
+    int *out;
+    out = new int[width*height];
+
+    cl::Buffer d_out, d_in;
+    cl_int err = CL_SUCCESS;
+    try{
+        // First, query for platforms
+        std::vector<cl::Platform> platforms;
+        cl::Platform::get(&platforms);
+        if (platforms.size() == 0){
+            std::cout << "Platform Size 0!\n";
+            exit(1);
+        }
+
+        // Get list of devices on default platform and creat context
+        cl_context_properties properties[] =
+            { CL_CONTEXT_PLATFORM, (cl_context_properties)(platforms[0])(), 0};
+        cl::Context context(CL_DEVICE_TYPE_GPU, properties);
+        std::vector<cl::Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
+
+        // Create command queue
+        cl::CommandQueue queue(context, devices[0], 0, &err);
+
+        // Creating device memory buffer
+        d_in = cl::Buffer(context, CL_MEM_READ_ONLY, 
+                          width*height*sizeof(int));
+        d_out = cl::Buffer(context, CL_MEM_WRITE_ONLY, 
+                           width*height*sizeof(int));
+
+        // Bind memory buffer
+        queue.enqueueWriteBuffer(d_in, CL_TRUE, 0, width*height*sizeof(int),
+                                 array);
+
+        // now to read in the kernel
+        const char *trans_kernel = open_file("transpose2d.cl");
+
+        cl::Program::Sources source(1, 
+            std::make_pair(trans_kernel, strlen(trans_kernel)));
+
+        cl::Program program = cl::Program(context, source);
+        err = program.build(devices);
+        if (err != CL_SUCCESS){
+            std::cout << "you got problems" << '\n';
+        }
+        cl::Kernel kernel(program, "transpose2d", &err);
+
+        // Bind arguments for kernel
+        kernel.setArg(0,d_in);
+        kernel.setArg(1,d_out);
+        kernel.setArg(2,TILE*(TILE)*sizeof(int), NULL);
+        kernel.setArg(3,width);
+        kernel.setArg(4,height);
+        kernel.setArg(5,TILE);
+        kernel.setArg(6,BLOCK);
+
+        // Number of work-items
+        cl::NDRange localSize(256);
+
+        cl::NDRange globalSize((int)(ceil(width*height/(float)256)*256));
+
+        cl::Event event;
+        queue.enqueueNDRangeKernel(
+            kernel,
+            cl::NullRange,
+            globalSize,
+            localSize,
+            NULL,
+            &event
+        );
+
+        event.wait();
+
+        queue.enqueueReadBuffer(d_out, CL_TRUE, 0, width*height*sizeof(int),
+                                out);
+
+        
+    }
+    catch(cl::Error err){
+        std::cerr << "ERROR: " << err.what() 
+                  << "("<<err.err()<<")" << std::endl;
+
+    }
+
+    return out;
+
 }
 
 // Function to print an array
-void print_array(double *array, int width, int height){
+void print_array(int *array, int width, int height){
 
     int index = 0;
     for (int i = 0; i < height; ++i){
