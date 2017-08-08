@@ -31,6 +31,25 @@ void print_array(double *array, int width, int height);
 // Function to open a file and return a const char *
 const char *open_file(std::string filename);
 
+/*
+const char *copy_kernel = "\n" \
+"#pragma OPENCL EXTENSION cl_khr_fp64 : enable \n" \
+"__kernel void copy2d(__global double *in, __global double *out, \n" \
+                     "const unsigned int width, const unsigned int height \n" \
+                     "const unsigned int tile, const unsigned int block_rows){ \n" \
+    "// Global Thread ID \n" \
+    "int xid = get_global_id(0); \n" \
+    "int yid = get_global_id(1); \n" \
+" \n" \
+    "int index = xid + width*yid; \n" \
+    "for (int i = 0; i < tile;  i+=block_rows){ \n" \
+        "out[index + i*width] = in[index + i*width]; \n" \
+    "} \n" \
+" \n" \
+"} \n" \
+" \n" ;
+*/
+
 /*----------------------------------------------------------------------------//
 * MAIN
 *-----------------------------------------------------------------------------*/
@@ -115,11 +134,11 @@ double *test_copy(double *array, int width, int height){
 
         // Bind arguments for kernel
         kernel.setArg(0,d_in);
-        kernel.setArg(0,d_out);
-        kernel.setArg(0,(unsigned int)width);
-        kernel.setArg(0,(unsigned int)height);
-        kernel.setArg(0,(unsigned int)TILE);
-        kernel.setArg(0,(unsigned int)BLOCK);
+        kernel.setArg(1,d_out);
+        kernel.setArg(2,width);
+        kernel.setArg(3,height);
+        kernel.setArg(4,TILE);
+        kernel.setArg(5,BLOCK);
 
         // Number of work-items
         cl::NDRange localSize(64);
