@@ -124,9 +124,9 @@ int *test_copy(int *array, int width, int height){
         kernel.setArg(5,BLOCK);
 
         // Number of work-items
-        cl::NDRange localSize(8, 8);
+        cl::NDRange localSize(TILE, BLOCK);
 
-        cl::NDRange globalSize(32,32);
+        cl::NDRange globalSize(width,height);
 
         cl::Event event;
         queue.enqueueNDRangeKernel(
@@ -212,7 +212,7 @@ int *test_transpose(int *array, int width, int height){
         kernel.setArg(6,BLOCK);
 
         // Number of work-items
-        cl::NDRange localSize(BLOCK, BLOCK);
+        cl::NDRange localSize(TILE, BLOCK);
 
         cl::NDRange globalSize(width, height);
 
