@@ -50,17 +50,17 @@ int main(){
     cudaMemcpy(d_b, h_b, sizeof(double)*n, cudaMemcpyHostToDevice);
 
     // Creating blocks and grid ints
-    int blocks, grid;
+    int threads, grid;
 
-    blocks = 64;
-    grid = (int)ceil((float)n/blocks);
+    threads = 64;
+    grid = (int)ceil((float)n/threads);
 
-    vecAdd<<<grid, blocks>>>(d_a, d_b, d_c, n);
+    vecAdd<<<grid, threads>>>(d_a, d_b, d_c, n);
 
     // Now to copy c back
     cudaMemcpy(h_c, d_c, sizeof(double)*n, cudaMemcpyDeviceToHost);
 
-    int sum = 0;
+    double sum = 0;
     for (int i = 0; i < n; ++i){
         sum += h_c[i];
     }

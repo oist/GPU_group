@@ -5,25 +5,34 @@
 *
 *-----------------------------------------------------------------------------*/
 
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
+//#pragma OPENCL EXTENSION cl_khr_fp64 : enable
 __kernel void transpose2d(__global int *in, __global int *out, 
                           __local int *tile,
                           const unsigned int width, const unsigned int height,
                           const unsigned int tile_size, 
                           const unsigned int block_rows){
-
-    //int xid = get_group_id(0)*tile_size + get_local_id(0);
-    //int yid = get_group_id(1)*tile_size + get_local_id(1);
+    // STRAIGHT FORWARD EXAMPLE
     int xid = get_global_id(0);
     int yid = get_global_id(1);
 
     int index_in = xid + width*yid;
     int index_out = yid + height*xid;
 
-    for (int i = 0; i < tile_size; i+=block_rows){
-        out[index_out] = in[index_in];
-    }
+    out[index_out] = in[index_in];
+
 /*
+
+    int xid = get_group_id(0)*tile_size + get_local_id(0);
+    int yid = get_group_id(1)*tile_size + get_local_id(1);
+
+    int index_in = xid + width*yid;
+    int index_out = yid + height*xid;
+
+    for (int i = 0; i < tile_size; i+=block_rows){
+        out[index_out+i] = in[index_in + i*width];
+    }
+
+    //------------------------------------------------------------------------//
     int blockIdx_x, blockIdx_y;
 
     if (width == height){

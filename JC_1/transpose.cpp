@@ -39,29 +39,24 @@ const char *open_file(std::string filename);
 int main(){
 
     // Creating 32x32 array to mess around with
-    int array[32*32];
-    for (int i = 0; i < 32*32; i++){
-        if (i % 2 == 0){
-            array[i] = 0.0;
-        }
-        else{
-            array[i] = 1.0;
-        }
+    int array[TILE*TILE];
+    for (int i = 0; i < TILE*TILE; i++){
+        array[i] = i % 2;
     }
 
     std::cout << "ORIGINAL ARRAY:\n";
-    print_array(array, 32, 32);
+    print_array(array, TILE, TILE);
 
     std::cout << "\n\n";
 
-    int *copied_array = test_copy(array, 32, 32);
+    int *copied_array = test_copy(array, TILE, TILE);
     std::cout << "COPIED ARRAY:\n";
-    print_array(copied_array, 32, 32);
+    print_array(copied_array, TILE, TILE);
     std::cout << "\n\n";
 
-    int *transposed_array = test_transpose(array, 32, 32);
+    int *transposed_array = test_transpose(array, TILE, TILE);
     std::cout << "TRANSPOSED ARRAY:\n";
-    print_array(transposed_array, 32, 32);
+    print_array(transposed_array, TILE, TILE);
     std::cout << "\n\n";
     
 }
@@ -129,9 +124,9 @@ int *test_copy(int *array, int width, int height){
         kernel.setArg(5,BLOCK);
 
         // Number of work-items
-        cl::NDRange localSize(256);
+        cl::NDRange localSize(8, 8);
 
-        cl::NDRange globalSize((int)(ceil(width*height/(float)256)*256));
+        cl::NDRange globalSize(32,32);
 
         cl::Event event;
         queue.enqueueNDRangeKernel(
@@ -217,9 +212,9 @@ int *test_transpose(int *array, int width, int height){
         kernel.setArg(6,BLOCK);
 
         // Number of work-items
-        cl::NDRange localSize(256);
+        cl::NDRange localSize(BLOCK, BLOCK);
 
-        cl::NDRange globalSize((int)(ceil(width*height/(float)256)*256));
+        cl::NDRange globalSize(width, height);
 
         cl::Event event;
         queue.enqueueNDRangeKernel(

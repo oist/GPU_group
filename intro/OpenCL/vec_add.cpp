@@ -35,7 +35,7 @@ const char *kernelSource =                                   "\n" \
 int main(){
 
     // length of vectors
-    unsigned int n = 1;
+    unsigned int n = 1000000;
 
     // host vectors
     double *h_a, *h_b, *h_c;
