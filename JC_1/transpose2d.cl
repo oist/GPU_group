@@ -11,7 +11,6 @@ __kernel void transpose2d(__global int *in, __global int *out,
                           const unsigned int width, const unsigned int height,
                           const unsigned int tile_size, 
                           const unsigned int block_rows){
-/*
     // STRAIGHT FORWARD EXAMPLE
     int xid = get_global_id(0);
     int yid = get_global_id(1);
@@ -21,7 +20,6 @@ __kernel void transpose2d(__global int *in, __global int *out,
 
     out[index_out] = in[index_in];
 
-*/
 /*
     // TILE EXAMPLE
     // Global Thread ID
@@ -35,7 +33,7 @@ __kernel void transpose2d(__global int *in, __global int *out,
         out[index_out + i] = in[index_in + i*width];
     }
 */
-
+/*
     // COALESCED TRANSPOSE
     int xthread = get_local_id(0);
     int ythread = get_local_id(1);
@@ -55,12 +53,13 @@ __kernel void transpose2d(__global int *in, __global int *out,
         tile[tile_index] = in[index_in + width];
     }
 
-    barrier(CLK_LOCAL_MEM_FENCE);
+    barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
     for (int i = 0; i < tile_size; i += block_rows){
         tile_index = ythread + i + xthread*height;
         out[index_out + i*height] = tile[tile_index];
     }
+*/
 /*
     int blockIdx_x, blockIdx_y;
 

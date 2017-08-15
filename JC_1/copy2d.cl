@@ -9,7 +9,6 @@
 __kernel void copy2d(__global double *in, __global double *out,
                      const unsigned int width, const unsigned int height,
                      const unsigned int tile, const unsigned int block_rows){
-/*
     // STRAIGHT FORWARD EXAMPLE
     int xid = get_global_id(0);
     int yid = get_global_id(1);
@@ -18,8 +17,7 @@ __kernel void copy2d(__global double *in, __global double *out,
     int index = xid + width*yid;
     out[index] = in[index];
 
-*/
-
+/*
     // TILE EXAMPLE
     // Global Thread ID
     int xid = get_group_id(0)*tile + get_local_id(0);
@@ -30,6 +28,7 @@ __kernel void copy2d(__global double *in, __global double *out,
     for (int i = 0; i < tile;  i+=block_rows){
         out[index + i*width] = in[index + i*width];
     }
+*/
 
 }
 

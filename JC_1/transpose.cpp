@@ -25,6 +25,9 @@ int *test_copy(int *array, int width, int height);
 // Function to test the transpose kernel
 int *test_transpose(int *array, int width, int height);
 
+// Function to test transpose on cpu
+int *cpu_transpose(int *array, int width, int height);
+
 // Function to print an array
 void print_array(int *array, int width, int height);
 
@@ -49,6 +52,11 @@ int main(){
 
     std::cout << "\n\n";
 
+    int *cpu_array = cpu_transpose(array, TILE, TILE);
+    std::cout << "CPU TRANSPOSED ARRAY:\n";
+    print_array(cpu_array, TILE, TILE);
+    std::cout << "\n\n";
+
     int *copied_array = test_copy(array, TILE, TILE);
     std::cout << "COPIED ARRAY:\n";
     print_array(copied_array, TILE, TILE);
@@ -65,6 +73,25 @@ int main(){
 /*----------------------------------------------------------------------------//
 * SUBROUTINES
 *-----------------------------------------------------------------------------*/
+
+// Function to test transpose on cpu
+int *cpu_transpose(int *array, int width, int height){
+    int *out;
+    out = new int[width*height];
+
+    int index_in = 0;
+    int index_out = 0;
+
+    for (int i = 0; i < width; ++i){
+        for (int j = 0; j < height; ++j){
+            index_in = j + i*height;
+            index_out = i + j*width;
+            out[index_out] = array[index_in];
+        }
+    }
+
+    return out;
+}
 
 // Function to test the copy kernel
 int *test_copy(int *array, int width, int height){
