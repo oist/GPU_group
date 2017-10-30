@@ -1,6 +1,8 @@
-/*------------vec_add.cu------------------------------------------------------//
+/*------------check.cu------------------------------------------------------//
 *
-* Purpose: This is a simple cuda file for vector addition
+* Purpose: This is a simple cuda file for checking your gpu works
+*
+*          It prints 0 -> 63
 *
 *-----------------------------------------------------------------------------*/
 
