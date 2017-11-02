@@ -1,0 +1,2 @@
+//compile CIMG for macox 
+g++ -I/opt/X11/include -L/opt/X11/lib -lX11 test.cpp -o test.o
