@@ -2,3 +2,7 @@
 g++ -I/opt/X11/include -L/opt/X11/lib -lX11 test.cpp -o test.o
 //compile CIMG for tombo
 g++ -L/usr/lib64 -lX11 -lm -lpthread test.cpp -o test.out
+// Compile cuda + CIMG on tombo
+nvcc -std=c++11 -L/usr/lib64 -lX11 -lm -lpthread edgefinder.cu -o test.out
+// Run code on the GPU cluster on TOMBO
+srun --partition=gpu-lem --gres=gpu:1 ./a.out
