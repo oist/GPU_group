@@ -1,0 +1,226 @@
+\documentclass[11pt]{article}
+%Gummi|065|=)
+
+\usepackage{listings}
+\usepackage{color}
+
+\lstset{frame=tb,
+  language=C++,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=false,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numbers=none,
+  keywordstyle=\color{blue},
+  commentstyle=\color{cyan},
+  stringstyle=\color{magenta},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=4,
+  morecomment=[l][\color{blue}]{\#},
+  mathescape=false
+}
+
+\title{\textbf{GPU Skillpill Problem Set}}
+\author{James Schloss\\
+		Irina Reshodko}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section*{Outline}
+
+You are not intended to do all of these problems. Instead, please pick on that suits your interests and go from there. The final session of the GPU skillpill will be exclusively devoted to starting (but maybe not completing) one of these problems.
+
+\begin{enumerate}
+\item \textbf{Vector Addition in OpenCL:} For GPU computing, CUDA's major competitor is OpenCL; however OpenCL works much differently under the hood and is more powerful in many ways. This power comes at a cost of more cumbersome boilerplate code, but that's worth it in a few cases!
+\end{enumerate}
+
+\newpage
+\section*{Vector Addition in OpenCL}
+If you have ever played video games, you might be aware of the heated debate between DirectX and OpenGL for rendering graphics. 
+The former is Windows-specific and designed by Microsoft, while the latter is cross-platform and designed by the Khronos group. 
+In the early days of GPU computing, rather than using compute-specific languages, programmers used OpenGL to do computation. 
+Now, CUDA is king, but similar to how DirectX only works on Windows machines, CUDA only works on nVidia cards. 
+If you have an AMD card, you are out of luck, unless you use CUDA's competitor: OpenCL!
+
+OpenCL stands for the Open Computing Language and is meant to allow users to access any type of hardware with the same language. 
+When using GPU hardware with OpenCL, you can expect similar (sometimes faster) performance with OpenCL when compared to CUDA; however, it comes at a cost of bulky boiler-plate code.
+The extra code is mainly associated with choosing appropriate devices to work on and with and managing the memory of those devices.
+In addition, it is clear that the OpenCL API is significantly influenced by the same design philosphy of OpenGL, so if you want to make games later, this might be a good exercise to go through!
+
+First things first, when compiling OpenCL code, the compiler will be your standard c++ compiler \lstinline{g++} or \lstinline{clang++}. Because of this, you need to make sure you have the appropriate libraries installed (which your local supercomputer should!). On Tombo, this means using the same \lstinline{cuda\7.5.18} module you have been using. Compilation is a little different, though:
+
+\begin{lstlisting}
+g++ code.cpp -I/apps/free/cuda/7.5.18/include -L/apps/free/cuda/7.5.18/lib64 -lOpenCL
+\end{lstlisting}
+
+Note that we are using the \lstinline{-I} and \lstinline{-L} flags to include the appropriate directory. In most programs, these flags will be found in the \lstinline{makefile}.
+
+Now that we know how to compile, let's talk about how OpenCL differs from CUDA. Firstly, the headers:
+
+\begin{lstlisting}
+ #define __CL_ENABLE_EXCEPTIONS
+
+ #include <CL/cl.hpp>
+ #include <iostream>
+ #include <vector>
+ #include <math.h>
+
+\end{lstlisting}
+
+Here, we are using \lstinline{__CL_ENABLE_EXCEPTIONS} so we may play some tricks later. Outside of the \lstinline{CL/cl.hpp} heading, though, everything should be good.
+
+NOTE: We will be using the C++ API to OpenCL instead of C. Ultimately, the C++ API calls the C API, so it's the same thing. C++ just allows us to use some more interesting features of the language.
+
+Now for the kernel. In OpenCL, kernels are compiled at runtime, which might sound like an awful idea! On the other hand, it means that we can change the kernels on-the-fly without needing to recompile the code to use different functions. That's nice in it's own way. Ultimately, kernels are read in as strings (usually in separate files):
+
+\begin{lstlisting}
+// OpenCL kernel
+const char *kernelSource =                                   "\n" \
+"#pragma OPENCL EXTENSION cl_khr_fp64 : enable                \n" \
+"__kernel void vecAdd( __global double *a,                    \n" \
+"                      __global double *b,                    \n" \
+"                      __global double *c,                    \n" \
+"                      const unsigned int n){                 \n" \
+"    // Global Thread ID                                      \n" \
+"    int id = get_global_id(0);                               \n" \
+"                                                             \n" \
+"    // Remain in bounds...                                   \n" \
+"    if (id < n){                                             \n" \
+"        c[id] = a[id] + b[id];                               \n" \
+"    }                                                        \n" \
+"}                                                            \n" \
+                                                             "\n" ;
+\end{lstlisting}
+
+Overall, the code is quite similar to the CUDA kernel, except that \lstinline{get_global_id(0)} is a little different than \lstinline{blockIdx.x * blickDim.x + threadIdx.x}. For OpenCL, 0, 1, and 2 are $x$, $y$, and $z$.
+
+Now for the main code...
+\begin{lstlisting}
+    // length of vectors
+    unsigned int n = 1000000;
+
+    // host vectors
+    double *h_a, *h_b, *h_c;
+
+    h_a = new double[n];
+    h_b = new double[n];
+    h_c = new double[n];
+
+    // Setting all elements to 1
+    for (int i = 0; i < n; ++i){
+        h_a[i] = 1;
+        h_b[i] = 1;
+    }
+
+    // device vectors
+    cl::Buffer d_a, d_b, d_c;
+
+    cl_int err = CL_SUCCESS;
+\end{lstlisting}
+
+Here there are some obvious differences with initialization. For one, we can use the C++ keyword \lstinline{new} which helps because we do not need to \lstinline{free()} the variables later. In addition, it's clear that OpenCL calls everything on the GPU a \lstinline{cl::Buffer}, to differentiate between what's on the CPU and GPU. 
+
+Now for the bulk of the code. Note we will have most of it in a \lstinline{try / catch} conditional. This is another pitfall of OpenCL: debugging's a pain!
+
+Firstly, we query for platforms and select the GPU.
+
+\begin{lstlisting}
+    try{
+
+        // First, Query for platforms
+        std::vector<cl::Platform> platforms;
+        cl::Platform::get(&platforms);
+        if (platforms.size() == 0){
+            std::cout << "Platform size 0\n";
+            return -1;
+        }
+
+        // Get list of devices on default platform and create context
+        cl_context_properties properties[] =
+            { CL_CONTEXT_PLATFORM, (cl_context_properties)(platforms[0])(), 0};
+
+        cl::Context context(CL_DEVICE_TYPE_GPU, properties);
+        std::vector<cl::Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
+
+\end{lstlisting}
+
+Next, we create a \lstinline{commandQueue}, which is basically the queue of commands to implement. The first command is writing the buffers.
+
+\begin{lstlisting}
+        // Create command queue on first device
+        cl::CommandQueue queue(context, devices[0], 0, &err);
+
+        // Create device memory buffers
+        d_a = cl::Buffer(context, CL_MEM_READ_ONLY, n*sizeof(double));
+        d_b = cl::Buffer(context, CL_MEM_READ_ONLY, n*sizeof(double));
+        d_c = cl::Buffer(context, CL_MEM_WRITE_ONLY, n*sizeof(double));
+
+        // Bind memory buffers
+        queue.enqueueWriteBuffer(d_a, CL_TRUE, 0, n*sizeof(double), h_a);
+        queue.enqueueWriteBuffer(d_b, CL_TRUE, 0, n*sizeof(double), h_b);
+
+\end{lstlisting}
+
+Finally, we build the kernel, set the arguments, run it and get the output.
+
+\begin{lstlisting}
+        // Build kernel from source string
+        cl::Program::Sources source(1,
+            std::make_pair(kernelSource,strlen(kernelSource)));
+        cl::Program program_ = cl::Program(context, source);
+        program_.build(devices);
+
+        // Create kernel object
+        cl::Kernel kernel(program_, "vecAdd", &err);
+
+        // bind kernel arguments to kernel
+        kernel.setArg(0, d_a);
+        kernel.setArg(1, d_b);
+        kernel.setArg(2, d_c);
+        kernel.setArg(3, n);
+
+        // Number of work items in each work group
+        cl::NDRange localSize(64);
+
+        // Number of total work items -- localsize must be a divisor
+        cl::NDRange globalSize((int)(ceil(n/(float)64)*64));
+
+        // Enqueue kernel
+        cl::Event event;
+        queue.enqueueNDRangeKernel(
+            kernel,
+            cl::NullRange,
+            globalSize,
+            localSize,
+            NULL,
+            &event
+        );
+
+        // Wait until kernel completion
+        event.wait();
+
+        // Read back d_c
+        queue.enqueueReadBuffer(d_c, CL_TRUE, 0, n*sizeof(double), h_c);
+    }
+
+\end{lstlisting}
+
+Finally, the catch statement looks like:
+
+\begin{lstlisting}
+    catch(cl::Error err){
+        std::cerr << "ERROR: "<<err.what()<<"("<<err.err()<<")"<<std::endl;
+    }
+\end{lstlisting}
+
+At this point, you should have the vector $c$ ready to read, so do whatever you like to output it's contents and check that you did things correctly. Don't forget to delete the appropriate arrays!
+
+It's important to note here that you may need to look up the error code for OpenCL to figure out what the error means, which brings me back to my point before: OpenCL is a pain to debug!
+
+Still, it's open-source and can work on all hardware, so a few hassles here and there are not too big of a deal when compared to CUDA.
+\end{document}
