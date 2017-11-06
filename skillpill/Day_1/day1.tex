@@ -94,6 +94,36 @@
 \setbeamertemplate{background}{} % No background logo after title frame
 
 \begin{frame}
+\frametitle{Prerequisites}
+This Skillpill \textit{might} be reasonably advanced and requires a small amount of knowledge in the following areas:
+\begin{itemize}
+\item terminal usage 
+\item HPC interfacing
+\item C/C++
+\end{itemize}
+
+If you are a bit shakey with any of these, that's fine. This is basically just a disclaimer.
+\end{frame}
+
+\begin{frame}
+\frametitle{Limitations of this skillpill}
+Unfortunately, this is a short course / intro into GPU computing. It's missing a few \textbf{incredibly important} points, like:
+\begin{itemize}
+\item debugging (cuda-gdb)
+\item benchmarking (nsight)
+\item multi-GPU processing
+\item advanced parallel computing concepts
+\end{itemize}
+\pause
+Some of these require GUI tools which work best on local systems. A few might be covered next week, \textbf{let me know if you are interested in any of them!}
+
+\pause
+\vspace{0.5cm}
+Also: There is a GPU Programming User Group (GPU Group) that will be meeting fairly regularly to discuss more detailed GPU-related matters!
+\end{frame}
+
+
+\begin{frame}
 \frametitle{Why use GPU computing?}
 
 General Purpose Graphical Processing Unit (GPGPU) computing is a great step towards HPC computing on consumer hardware. It works best with programs that are:
