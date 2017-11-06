@@ -1,2 +1,4 @@
-//compile CIMG for macox 
+//compile CIMG for macox
 g++ -I/opt/X11/include -L/opt/X11/lib -lX11 test.cpp -o test.o
+//compile CIMG for tombo
+g++ -L/usr/lib64 -lX11 -lm -lpthread test.cpp -o test.out
