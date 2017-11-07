@@ -9,9 +9,20 @@
 #include "CIMG/CImg.h"
 #include <cuda_runtime.h>
 #include "utils.h"
+#include "math.h"
 using namespace cimg_library;
 
-__device__ dim3 calcOffset(int szX, int szY)
+struct SPos
+{
+  int x;
+  int y;
+  int absOffset;
+
+  __device__ SPos(int xx = 0, int yy = 0, int aO = 0) : x(xx), y(yy), absOffset(aO)
+  {
+  }
+};
+__device__ SPos calcOffset(int szX, int szY)
 {
   // 2D grid with 2D blocks
   // int blockId = blockIdx.x + blockIdx.y * gridDim.x;
@@ -23,52 +34,65 @@ __device__ dim3 calcOffset(int szX, int szY)
   int tPosX = blockIdx.x * blockDim.x + threadIdx.x;
   int tPosY = blockIdx.y * blockDim.y + threadIdx.y;
   if (tPosX >= szX || tPosY >= szY)
-    return dim3(-1,-1,-1);
-  return dim3(tPosX, tPosY, tPosY * szX + tPosX);
+    return SPos(-1,-1,-1);
+  return SPos(tPosX, tPosY, tPosY * szX + tPosX);
 }
-__global__ void showBlocksKernel(const unsigned char * dInData, unsigned char * dOutData, int szX, int szY)
+
+__global__ void toGrayscale(float * dOut,
+                      const float * dInRed,
+                      const float * dInGreen,
+                      const float * dInBlue, int szX, int szY)
 {
-  int indx = calcOffset(szX, szY).z;
+  //Red * 0.3 + Green * 0.59 + Blue * 0.11
+  int indx = calcOffset(szX, szY).absOffset;
+  if (indx == -1)
+    return;
+  dOut[indx] = dInRed[indx] * 0.3 + dInGreen[indx] * 0.59 + dInBlue[indx] * 0.11;
+  return;
+}
+__global__ void showBlocksKernel(const float * dInData, float * dOutData, int szX, int szY)
+{
+  int indx = calcOffset(szX, szY).absOffset;
+  if (indx == -1)
+    return;
   dOutData[indx] = dInData[indx];
   if (threadIdx.x == 0 || threadIdx.y == 0)
     dOutData[indx] = 0;
   return;
 }
 
-__device__ convolve(const float * kernel, int kernelSzX, int kernelSzY,
-                    int cX, int cY, const unsigned char * dInData, int szX, int szY)
+__device__ float convolve(const float kernel[][3],
+                    int cX, int cY, const float * dInData, int szX, int szY)
 {
   float gradient = 0.0f;
-  for (int i = -kernelSzX/2; i <= kernelSzX/2; i++)
+  for (int i = -1; i <= 1; i++)
   {
     int curX = cX + i;
     int relX = (curX < 0 ? 0 : (curX >= szX ? szX - 1 : curX));
-      for (int j = -kernelSzY/2; j <= kernelSzY/2; j++)
+      for (int j = -1; j <= 1; j++)
       {
         int curY = cY + j;
         int relY = (curY < 0 ? 0 : (curY >= szY ? szY - 1 : curY));
-        gradient += kernel[i][j] * dInData[curX + curY * szX];
+        gradient += kernel[i+1][j+1] * dInData[relX + relY * szX];
       }
   }
   return gradient;
 }
-__global__ void sobelEdgeDetection(const unsigned char * dInData, unsigned char * dOutData, int szX, int szY)
+__global__ void sobelEdgeDetection(const float * dInData, float * dOutData, int szX, int szY)
 {
-  int pos = calcOffset(szX, szY);
+  SPos pos = calcOffset(szX, szY);
+  if (pos.absOffset == -1)
+    return;
   float sobelKernelX[3][3] = {{1, 0, -1},
                             {2, 0, -2},
                             {1, 0, -1}};
   float sobelKernelY[3][3] = {{ 1,  2,  1},
                             { 0,  0,  0},
                             {-1, -2, -1}};
-  int fromX = 0;
-  int fromY = 0;
-  int toX = 0;
-  int toY = 0;
-  float gradientX = convolve(sobelKernelX, 3, 3, pos.x, pos.y, dInData, szX, szY);
-  float gradientY = convolve(sobelKernelY, 3, 3, pos.x, pos.y, dInData, szX, szY);
-  float totGradient = sqrt(gradientX * gradientX + gradientY * gradientY)/sqrt(2);
-  dOutData[pos.z] = (unsigned char) totGradient;
+  float gradientX = convolve(sobelKernelX, pos.x, pos.y, dInData, szX, szY);
+  float gradientY = convolve(sobelKernelY, pos.x, pos.y, dInData, szX, szY);
+  float totGradient = sqrtf(gradientX * gradientX + gradientY * gradientY);
+  dOutData[pos.absOffset] = (float) totGradient;
 }
 
 int main(int argc, char *argv[])
@@ -76,28 +100,22 @@ int main(int argc, char *argv[])
   // Get file name from the command line
   std::string fileName("images/thebrain.png");
   if (argc > 1)
-    fileName = std::string(argv[2]);
+    fileName = std::string(argv[1]);
   std::cout << fileName;
   // Load the image
-  CImg<unsigned char> image(fileName.c_str());
+  CImg<float> image(fileName.c_str());
   // Get image dimensions
   int szX = image.width();
   int szY = image.height();
+  std::cout << "Size of the image: " << szX << " x " << szY << std::endl;
   // Extract the channels
-  const unsigned char * redChannel = &image(0, 0, 0, 0);
-  const unsigned char * greenChannel = &image(0, 0, 0, 1);
-  const unsigned char * blueChannel = &image(0, 0, 0, 2);
-  // Create the output image as a 3-channel image of the same size as input
-  CImg<unsigned char> outImage(image, false);
-  // Extract the channels form the output image
-  unsigned char * outRedCh = &outImage(0, 0, 0, 0);
-  unsigned char * outGreenCh = &outImage(0, 0, 0, 1);
-  unsigned char * outBlueCh = &outImage(0, 0, 0, 2);
-  // Test if it works
-  outRedCh[20] = 200;
-  outGreenCh[30] = 200;
-  outBlueCh[10] = 200;
-  outImage.save_png("images/test.png");
+  const float * redChannel = &image(0, 0, 0, 0);
+  const float * greenChannel = &image(0, 0, 0, 1);
+  const float * blueChannel = &image(0, 0, 0, 2);
+  // Create the output image as a grayscale image of the same size as input
+  CImg<float> outImage(szX, szY, 1, 1, 0);
+  // Extract the data from the output image
+  float * outGray = &outImage(0, 0, 0, 0);
   // Get cuda properties
   cudaDeviceProp prop;
   cudaGetDeviceProperties(&prop, 0);
@@ -105,19 +123,17 @@ int main(int argc, char *argv[])
   int maxThreads = prop.maxThreadsPerBlock;
   std::cout << "Maximum threads per block: " << maxThreads;
   // Allocate memory on the GPU
-  int dataSz = szX * szY * sizeof(unsigned char);
-  unsigned char * d_redCh = NULL;
-  unsigned char * d_greenCh = NULL;
-  unsigned char * d_blueCh = NULL;
+  int dataSz = szX * szY * sizeof(float);
+  float * d_redCh = NULL;
+  float * d_greenCh = NULL;
+  float * d_blueCh = NULL;
   checkCudaErrors(cudaMalloc(&d_redCh, dataSz));
   checkCudaErrors(cudaMalloc(&d_greenCh, dataSz));
   checkCudaErrors(cudaMalloc(&d_blueCh, dataSz));
-  unsigned char * d_outRedCh =NULL;
-  unsigned char * d_outGreenCh = NULL;
-  unsigned char * d_outBlueCh = NULL;
-  checkCudaErrors(cudaMalloc(&d_outRedCh, dataSz));
-  checkCudaErrors(cudaMalloc(&d_outGreenCh, dataSz));
-  checkCudaErrors(cudaMalloc(&d_outBlueCh, dataSz));
+  float * d_gray = NULL;
+  checkCudaErrors(cudaMalloc(&d_gray, dataSz));
+  float * d_outGray = NULL;
+  checkCudaErrors(cudaMalloc(&d_outGray, dataSz));
   // Copy image data to GPU
   checkCudaErrors(cudaMemcpy(d_redCh, redChannel, dataSz, cudaMemcpyHostToDevice));
   checkCudaErrors(cudaMemcpy(d_greenCh, greenChannel, dataSz, cudaMemcpyHostToDevice));
@@ -127,22 +143,24 @@ int main(int argc, char *argv[])
   // Compute correct grid size (i.e., number of blocks per kernel launch)
   // from the image size and and block size.
   const dim3 gridSize(int(szX/blockSize.x)+1, int(szY/blockSize.y)+1, 1);
+  // Convert image to grayscale
+  toGrayscale<<<gridSize, blockSize>>>(d_gray, d_redCh, d_greenCh, d_blueCh, szX, szY);
   // Run show blocks kernel
-  showBlocksKernel<<<gridSize, blockSize>>>(d_redCh, d_outRedCh, szX, szY);
-  showBlocksKernel<<<gridSize, blockSize>>>(d_greenCh, d_outGreenCh, szX, szY);
-  showBlocksKernel<<<gridSize, blockSize>>>(d_blueCh, d_outBlueCh, szX, szY);
+  showBlocksKernel<<<gridSize, blockSize>>>(d_gray, d_outGray, szX, szY);
   // Copy results back to CPU
-  checkCudaErrors(cudaMemcpy(outRedCh, d_outRedCh, dataSz, cudaMemcpyDeviceToHost));
-  checkCudaErrors(cudaMemcpy(outGreenCh, d_outGreenCh, dataSz, cudaMemcpyDeviceToHost));
-  checkCudaErrors(cudaMemcpy(outBlueCh, d_outBlueCh, dataSz, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(outGray, d_outGray, dataSz, cudaMemcpyDeviceToHost));
   // Save resulting image
   outImage.save_png("images/testblocks.png");
-
-  // Clean up GPU memory
+  // Detect edges using Sobel operator
+  sobelEdgeDetection<<<gridSize, blockSize>>>(d_gray, d_outGray, szX, szY);
+  // Copy results back to CPU
+  checkCudaErrors(cudaMemcpy(outGray, d_outGray, dataSz, cudaMemcpyDeviceToHost));
+  // Save the result
+  outImage.save_png("images/testedge.png");
+  // Clean up GPU memory, we don't need the color channels anymore
   checkCudaErrors(cudaFree(d_redCh));
   checkCudaErrors(cudaFree(d_greenCh));
   checkCudaErrors(cudaFree(d_blueCh));
-  checkCudaErrors(cudaFree(d_outRedCh));
-  checkCudaErrors(cudaFree(d_outGreenCh));
-  checkCudaErrors(cudaFree(d_outBlueCh));
+  checkCudaErrors(cudaFree(d_outGray));
+  checkCudaErrors(cudaFree(d_gray));
 }
