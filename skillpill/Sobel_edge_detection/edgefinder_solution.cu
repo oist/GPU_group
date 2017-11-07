@@ -24,10 +24,18 @@ struct SPos
 };
 __device__ SPos calcOffset(int szX, int szY)
 {
-  /*
-  * TODO: implement appropriate indexing
-  */
-  return SPos(0, 0, 0);
+  // 2D grid with 2D blocks
+  // int blockId = blockIdx.x + blockIdx.y * gridDim.x;
+	// int indx = blockId * (blockDim.x * blockDim.y) + (threadIdx.y * blockDim.x) + threadIdx.x;
+  // if (indx >= szX * szY)
+  //   return -1;
+  // return indx;
+  // Calculate appropriate offsets in the array
+  int tPosX = blockIdx.x * blockDim.x + threadIdx.x;
+  int tPosY = blockIdx.y * blockDim.y + threadIdx.y;
+  if (tPosX >= szX || tPosY >= szY)
+    return SPos(-1,-1,-1);
+  return SPos(tPosX, tPosY, tPosY * szX + tPosX);
 }
 
 __global__ void toGrayscale(float * dOut,
@@ -36,14 +44,14 @@ __global__ void toGrayscale(float * dOut,
                       const float * dInBlue, int szX, int szY)
 {
   //Red * 0.3 + Green * 0.59 + Blue * 0.11
-  /*
-  * TODO: implement convertion to grayscale
-  */
+  int indx = calcOffset(szX, szY).absOffset;
+  if (indx == -1)
+    return;
+  dOut[indx] = dInRed[indx] * 0.3 + dInGreen[indx] * 0.59 + dInBlue[indx] * 0.11;
   return;
 }
 __global__ void showBlocksKernel(const float * dInData, float * dOutData, int szX, int szY)
 {
-  // This is just to show how do the blocks look like
   int indx = calcOffset(szX, szY).absOffset;
   if (indx == -1)
     return;
@@ -56,16 +64,35 @@ __global__ void showBlocksKernel(const float * dInData, float * dOutData, int sz
 __device__ float convolve(const float kernel[][3],
                     int cX, int cY, const float * dInData, int szX, int szY)
 {
-  /*
-  * TODO: implement convolution
-  */
-  return 0.0;
+  float gradient = 0.0f;
+  for (int i = -1; i <= 1; i++)
+  {
+    int curX = cX + i;
+    int relX = (curX < 0 ? 0 : (curX >= szX ? szX - 1 : curX));
+      for (int j = -1; j <= 1; j++)
+      {
+        int curY = cY + j;
+        int relY = (curY < 0 ? 0 : (curY >= szY ? szY - 1 : curY));
+        gradient += kernel[i+1][j+1] * dInData[relX + relY * szX];
+      }
+  }
+  return gradient;
 }
 __global__ void sobelEdgeDetection(const float * dInData, float * dOutData, int szX, int szY)
 {
-  /*
-  * TODO: implement Sobel filtering
-  */
+  SPos pos = calcOffset(szX, szY);
+  if (pos.absOffset == -1)
+    return;
+  float sobelKernelX[3][3] = {{1, 0, -1},
+                            {2, 0, -2},
+                            {1, 0, -1}};
+  float sobelKernelY[3][3] = {{ 1,  2,  1},
+                            { 0,  0,  0},
+                            {-1, -2, -1}};
+  float gradientX = convolve(sobelKernelX, pos.x, pos.y, dInData, szX, szY);
+  float gradientY = convolve(sobelKernelY, pos.x, pos.y, dInData, szX, szY);
+  float totGradient = sqrtf(gradientX * gradientX + gradientY * gradientY);
+  dOutData[pos.absOffset] = (float) totGradient;
 }
 
 int main(int argc, char *argv[])
@@ -94,60 +121,50 @@ int main(int argc, char *argv[])
   cudaGetDeviceProperties(&prop, 0);
   // Maximum threads per block on this device
   int maxThreads = prop.maxThreadsPerBlock;
-  std::cout << "Maximum threads per block: " << maxThreads << std::endl;
+  std::cout << "Maximum threads per block: " << maxThreads;
   // Allocate memory on the GPU
   int dataSz = szX * szY * sizeof(float);
   float * d_redCh = NULL;
+  float * d_greenCh = NULL;
+  float * d_blueCh = NULL;
   checkCudaErrors(cudaMalloc(&d_redCh, dataSz));
-  /*
-  * TODO: Allocate more channels here
-  */
+  checkCudaErrors(cudaMalloc(&d_greenCh, dataSz));
+  checkCudaErrors(cudaMalloc(&d_blueCh, dataSz));
+  float * d_gray = NULL;
+  checkCudaErrors(cudaMalloc(&d_gray, dataSz));
+  float * d_outGray = NULL;
+  checkCudaErrors(cudaMalloc(&d_outGray, dataSz));
   // Copy image data to GPU
-  /*
-  * TODO: Copy input data to the GPU: CPU->GPU copy
-  */
+  checkCudaErrors(cudaMemcpy(d_redCh, redChannel, dataSz, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(d_greenCh, greenChannel, dataSz, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(d_blueCh, blueChannel, dataSz, cudaMemcpyHostToDevice));
   // Set reasonable block size (i.e., number of threads per block)
-  /*
-  * TODO: Your code here>> const dim3 blockSize(..., ..., 1);
-  */
-  const dim3 blockSize(1, 1, 1);
+  const dim3 blockSize((int) sqrt(maxThreads), (int) sqrt(maxThreads), 1);
   // Compute correct grid size (i.e., number of blocks per kernel launch)
   // from the image size and and block size.
-  /*
-  * TODO: Your code here
-  */
-  const dim3 gridSize(1, 1, 1);
+  const dim3 gridSize(int(szX/blockSize.x)+1, int(szY/blockSize.y)+1, 1);
   // Convert image to grayscale
-  /*
-  * TODO: Call the RBG->grayscale kernel
-  */
+  toGrayscale<<<gridSize, blockSize>>>(d_gray, d_redCh, d_greenCh, d_blueCh, szX, szY);
   // Run show blocks kernel
-  /*
-  * TODO: Run the kernel
-  */
+  showBlocksKernel<<<gridSize, blockSize>>>(d_gray, d_outGray, szX, szY);
   // Copy results back to CPU
-  /*
-  * TODO: Your code here - > GPU->CPU copy
-  */
+  checkCudaErrors(cudaMemcpy(outGray, d_outGray, dataSz, cudaMemcpyDeviceToHost));
   // Save resulting image
   outImage.save_png("images/testblocks.png");
   // Detect edges using Sobel operator
-  /*
-  * TODO: Run the filter kernel
-  */
+  sobelEdgeDetection<<<gridSize, blockSize>>>(d_gray, d_outGray, szX, szY);
   // Copy results back to CPU
-  /*
-  * TODO: Copy GPU->CPU
-  */
-  // Normalize
+  checkCudaErrors(cudaMemcpy(outGray, d_outGray, dataSz, cudaMemcpyDeviceToHost));
   float minVal = 0.0;
   float maxVal = outImage.max_min(minVal);
+  // Normalize 
   outImage.operator*=(255/maxVal);
   // Save the result
   outImage.save_png("images/testedge.png");
   // Clean up GPU memory, we don't need the color channels anymore
-  /*
-  * TODO: Free the memory of all the channels
-  */
   checkCudaErrors(cudaFree(d_redCh));
+  checkCudaErrors(cudaFree(d_greenCh));
+  checkCudaErrors(cudaFree(d_blueCh));
+  checkCudaErrors(cudaFree(d_outGray));
+  checkCudaErrors(cudaFree(d_gray));
 }
