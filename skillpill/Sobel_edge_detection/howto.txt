@@ -6,3 +6,5 @@ g++ -L/usr/lib64 -lX11 -lm -lpthread test.cpp -o test.out
 nvcc -std=c++11 -L/usr/lib64 -lX11 -lm -lpthread edgefinder.cu -o test.out
 // Run code on the GPU cluster on TOMBO
 srun --partition=gpu-lem --gres=gpu:1 ./a.out
+// Load appropriate cuda version
+module load cuda/7.5.18

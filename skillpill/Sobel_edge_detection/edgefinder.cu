@@ -155,6 +155,10 @@ int main(int argc, char *argv[])
   sobelEdgeDetection<<<gridSize, blockSize>>>(d_gray, d_outGray, szX, szY);
   // Copy results back to CPU
   checkCudaErrors(cudaMemcpy(outGray, d_outGray, dataSz, cudaMemcpyDeviceToHost));
+  float minVal = 0.0;
+  float maxVal = outImage.max_min(minVal);
+  // Normalize 
+  outImage.operator*=(255/maxVal);
   // Save the result
   outImage.save_png("images/testedge.png");
   // Clean up GPU memory, we don't need the color channels anymore
