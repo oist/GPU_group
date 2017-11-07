@@ -90,7 +90,7 @@ __global__ void sobelEdgeDetection(const float * dInData, float * dOutData, int 
                             { 0,  0,  0},
                             {-1, -2, -1}};*/
   // Shared memory is only seen by the threads in one block!
-  if (pos.x == 0 && pos.y == 0)
+  if (threadIdx.x == 0 && threadIdx.y == 0)
   {
     // If it is the first thread in the block, initialize the filter in shared memory
     sobelKernelX[0][0]=1;sobelKernelX[0][1]=0;sobelKernelX[0][2]=-1;
