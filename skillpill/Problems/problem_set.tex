@@ -3,6 +3,7 @@
 
 \usepackage{listings}
 \usepackage{color}
+\usepackage{hyperref}
 
 \lstset{frame=tb,
   language=C++,
@@ -37,6 +38,10 @@ You are not intended to do all of these problems. Instead, please pick on that s
 
 \begin{enumerate}
 \item \textbf{Vector Addition in OpenCL:} For GPU computing, CUDA's major competitor is OpenCL; however OpenCL works much differently under the hood and is more powerful in many ways. This power comes at a cost of more cumbersome boilerplate code, but that's worth it in a few cases!
+\item \textbf{Matrix Transposition in CUDA:} This one is deceptively complicated and involves taking a matrix and switching the $x$ and $y$ indices. The simple way is just to mess around with gridding, but the hard (and efficient) way uses a shared memory tile, which is pretty cool!
+\item \textbf{Using the cuFFT library:} This is a simple example of the cufft library and how it works
+\item \textbf{Sobel filter with FFT (or not):} Basically, finish what we started last Thursday. If you want, use the cuFFT library!
+\item \textbf{Parallel Reduction:} this is also sometimes called \textit{parallel summation}. The idea's simple: we have an array and we want to add all the elements together, leaving the sum of all elements in the first position \lstinline{a[0]}.
 \end{enumerate}
 
 \newpage
@@ -223,4 +228,166 @@ At this point, you should have the vector $c$ ready to read, so do whatever you 
 It's important to note here that you may need to look up the error code for OpenCL to figure out what the error means, which brings me back to my point before: OpenCL is a pain to debug!
 
 Still, it's open-source and can work on all hardware, so a few hassles here and there are not too big of a deal when compared to CUDA.
+
+\newpage
+
+\section*{Matrix Transposition in CUDA}
+
+This problem seems straightforward: Take a matrix $A[i,j]$ and turn it into $A[j,i]$. In principle, this can be naively by just creating two separate index distributions and copying the contents of one array appropriately into the next array; however, when compared to a direct copy (no transpose), there will be a \textit{huge} drop in performance, and this is because you lose a property known as \textit{coalescence}. Take a look at the following code:
+
+\begin{lstlisting}
+...
+int main(){
+    double *a, *b;
+    int n = 10;
+    int index_a, index_b;
+    
+    a = (double *)malloc(sizeof(double)*n*n);
+    b = (double *)malloc(sizeof(double)*n*n);
+    
+    for (int i = 0; i < n; ++i){
+        for (int j = 0; j < n; ++j){
+            index_a = j + i*n;
+            index_b = i + j*n;
+            a[index_a] = index_a;
+            b[index_b] = index_b;
+        }
+    }
+}
+...
+\end{lstlisting}
+
+Here, we have two arrays \lstinline{a} and \lstinline{b} and we are populating them with two different indices \lstinline{index_a = j + i*n} and \lstinline{index_b = i * j*n}. Both indices will appropriately fill the arrays; however, \lstinline{index_a} will do so much, much faster because it needs to access successive elements of our psuedo-2D array, which \lstinline{index_b} has to skip over \lstinline{n} elements every \lstinline{j} iteration.
+
+In this way, \lstinline{index_a} is coalesced, while \lstinline{index_b} is not.
+
+Now, imagine a simple CPU-based transpose:
+
+\begin{lstlisting}
+...
+int main(){
+    // Initialize a as above
+    for (int i = 0; i < n; ++i){
+        for (int j = 0; j < n; ++j){
+            index_a = j + i*n;
+            index_b = i + j*n;
+            b[index_b] = a[index_a];
+        }
+    }
+}
+...
+\end{lstlisting}
+
+It might appear that no matter what we do, our second index will not be coalesced! However, we can get around this with a shared-memory tile. 
+Now, here's where I get a little lazy. Everything from this point has been properly described here: \sloppy \url{https://devblogs.nvidia.com/parallelforall/efficient-matrix-transpose-cuda-cc/}, so here's the problem:
+
+\begin{itemize}
+\item Perform a simple matrix transpose in CUDA (like the CPU code above, just on the GPU)
+\item Go here: \sloppy \url{https://devblogs.nvidia.com/parallelforall/efficient-matrix-transpose-cuda-cc/}. Make your code efficient
+\end{itemize}
+
+\newpage
+
+\section*{Using the cuFFT library}
+
+One operation that has become incredibly efficient on GPU's is the FFT (Fast Fourier Transform). This algorithm lies at the heart of almost every field of research that requires signal processing. For this problem, we assume that you already have an understanding of how the Fourier Transform works and ultimately just want to implement it in code. For a more in-depth description, feel free to look at: \url{https://leios.gitbooks.io/algorithm-archive/content/chapters/computational_mathematics/FFT/cooley_tukey.html}.
+
+For the most part, the cuFFT library follows syntactically from the FFTW library and will require similar steps. In principle, the library allows for simple $n$-dimensional FFT's; however, depending on what you need, you may have to play some tricks. For this exercise, we will be focusing exclusively on 1D transforms, for 2D transforms, see the exercise on implementing a Sobel Filter with FFT's. For more complicated transforms, the full documentation for the cuFFT library can be found here: \url{http://docs.nvidia.com/cuda/cufft/index.html}.
+
+The cuFFT library has a special type called \lstinline{double2} or \lstinline{cufftDoubleComplex}, which is simply a complex number for FFT operations. For these values, \lstinline{number.x} will be the real component and \lstinline{number.y} will be the imaginary component. In principle, the cuFFT library works like this:
+\begin{enumerate}
+\item include the \lstinline{<cufft.h>} header file from the your cuda installation. Note that on Sango / Tombo, you may need to make sure that you have used \lstinline{module load cuda/7.5.18}
+\item Create a plan with the \lstinline{cufftPlan1D()} function. \lstinline{cufftPlan2D()} and \lstinline{cufftPlan3D()} are also allowed here, however, if you need more complicated transforms, you might need to use \lstinline{cufftPlanMany()}, which will not be covered here.
+\item Execute plan with the \lstinline{cufftExecC2C()} function. Note that in this case, the $C$ means that the transform will use a complex to complex transformation. There are other transformations available:
+    \begin{itemize}
+    \item \lstinline{cufftExecR2C} Will execute a transformation from real to complex (usually for a forward transform)
+    \item \lstinline{cufftExecC2R} Will execute a transformation from complex to real (usually for an inverse transform)
+    \item For double precision, \lstinline{cufftExecC2C} $=$ \lstinline{cufftExecZ2Z}, \lstinline{cufftExecC2R} $=$ \lstinline{cufftExecZ2D}, and \lstinline{cufftExecR2C} $=$ \lstinline{cufftExecD2Z}
+    \end{itemize}
+\end{enumerate}
+
+Here is some example code to see how this might look:
+
+\begin{lstlisting}
+#include <cufft.h>
+
+int main(){
+
+    // Initializing variables
+    int n = 1024;
+    cufftHandle plan1d;
+    double2 h_a, d_a;
+    
+    // Allocation / definitions
+    a = (double2 *)malloc(sizeof(double2)*n);
+    for (int i = 0; i < n; ++i){
+        a[i].x = sin(2*M_PI*i/n);
+        a[i].y = 0;
+    }
+    
+    cudaMalloc(&d_a, sizeof(double2)*n);
+    cudaMemcpy(d_a, h_a, sizeof(double)*n, cudaMemcpyHostToDevice);
+    
+    cufftPlan1D(&plan1d, n, Z2Z);
+    
+    // Executing FFT 
+    cufftExecZ2Z(plan1d, d_a, d_a, CUFFT_FORWARD);
+    
+    //Executing the iFFT
+    cufftExecZ2Z(plan1d, d_a, d_a, CUFFT_INVERSE);
+    
+    // Copying back
+    cudaMemcpy(h_a, d_a, sizeof(double)*n, cudaMemcpyHostToDevice);
+
+}
+\end{lstlisting}
+
+\textbf{Exercise:} Use cuFFT to do a 2D FFT of some 2D sinusoidal field you have created.
+
+\newpage
+
+\section*{Sobel Filter with FFT}
+
+Last time on \textit{GPU SkillPill X: The Final Pill}, we implemented a basic Sobel filter with a convolution using a window method. If using this method on an $m \times n$ image with a $p \times q$ filter, the complexity is $\sim \Theta(mnpq)$. By using the Fourier convolutional theorem, we can do the same convolution with a complexity of $\sim \Theta(mn(\log (m) + \log (n)))$, which is better for large filters. Also, using the convolutional theorem is better for data with dimensions higher than 2.
+
+\newpage
+
+\section*{Parallel Reduction}
+
+This one is sometimes called ``Parallel Summation'', but it ultimately doesn't matter. Your job is to do the following:
+
+\begin{lstlisting}
+int main(){
+    double a[10];
+    
+    // Initialize a here
+    
+    // Summing a
+    double sum = 0;
+    for (int i = 0; i < n; ++i){
+        sum += a[i]
+    }
+}
+\end{lstlisting}
+
+This seems simple enough on the CPU; however, on the GPU it is not obvious how parallelization will help at all! Simply put, this is a sequential operation, so the parallelized version will still require a for loop; however, it ultimately boils down to a bunch of parallel vector additions, something like this:
+
+\begin{lstlisting}
+int main(){
+    // Initialize a as above
+    // Summing a
+    // Note, if n is not a power of 2, just add a bunch of 0's
+    for (int num = n/2; num > 1; num *= 0.5){
+        for (int i = 0; i < num; ++i){
+            a[i] += a[i+num];
+        }
+    }
+}
+\end{lstlisting}
+
+In this case, the for loop can be quire easily parallelized on the GPU, while the outer for loop on the outside cannot. 
+It should be clear that by performing this operation, the sum will appear in the first element of the array.
+Your job is to implement this summation / reduction on the GPU. Good luck!
+
+More information can be found here: \url{http://www.drdobbs.com/architecture-and-design/parallel-pattern-7-reduce/222000718}
 \end{document}
