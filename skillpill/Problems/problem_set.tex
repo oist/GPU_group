@@ -312,32 +312,30 @@ Here is some example code to see how this might look:
 #include <cufft.h>
 
 int main(){
-
     // Initializing variables
     int n = 1024;
     cufftHandle plan1d;
-    double2 h_a, d_a;
-    
+    double2 *h_a, *d_a;
+
     // Allocation / definitions
-    a = (double2 *)malloc(sizeof(double2)*n);
+    h_a = (double2 *)malloc(sizeof(double2)*n);
     for (int i = 0; i < n; ++i){
-        a[i].x = sin(2*M_PI*i/n);
-        a[i].y = 0;
+        h_a[i].x = sin(2*M_PI*i/n);
+        h_a[i].y = 0;
     }
-    
+
     cudaMalloc(&d_a, sizeof(double2)*n);
     cudaMemcpy(d_a, h_a, sizeof(double)*n, cudaMemcpyHostToDevice);
-    
-    cufftPlan1D(&plan1d, n, Z2Z);
-    
-    // Executing FFT 
+    cufftPlan1d(&plan1d, n, CUFFT_Z2Z, 1);
+
+    // Executing FFT
     cufftExecZ2Z(plan1d, d_a, d_a, CUFFT_FORWARD);
-    
+
     //Executing the iFFT
     cufftExecZ2Z(plan1d, d_a, d_a, CUFFT_INVERSE);
-    
+
     // Copying back
-    cudaMemcpy(h_a, d_a, sizeof(double)*n, cudaMemcpyHostToDevice);
+    cudaMemcpy(h_a, d_a, sizeof(double)*n, cudaMemcpyDeviceToHost);
 
 }
 \end{lstlisting}
@@ -377,7 +375,7 @@ int main(){
     // Initialize a as above
     // Summing a
     // Note, if n is not a power of 2, just add a bunch of 0's
-    for (int num = n/2; num > 1; num *= 0.5){
+    for (int num = n/2; num >= 1; num *= 0.5){
         for (int i = 0; i < num; ++i){
             a[i] += a[i+num];
         }
