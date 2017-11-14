@@ -4,6 +4,7 @@
 \usepackage{listings}
 \usepackage{color}
 \usepackage{hyperref}
+\usepackage{mathrsfs}
 
 \lstset{frame=tb,
   language=C++,
@@ -48,16 +49,16 @@ You are not intended to do all of these problems. Instead, please pick one that 
 \section*{Vector Addition in OpenCL}
 If you have ever played video games, you might be aware of the heated debate between DirectX and OpenGL for rendering graphics. 
 The former is Windows-specific and designed by Microsoft, while the latter is cross-platform and designed by the Khronos group. 
-In the early days of GPU computing, rather than using compute-specific languages, programmers used OpenGL to do computation. 
-Now, CUDA is king, but similar to how DirectX only works on Windows machines, CUDA only works on nVidia cards. 
+In the early days of GPU computing, rather than using compute-specific languages, programmers actually used OpenGL to do computation. Now, some people have claimed that GPU computing with Vulkan is faster than CUDA, but because Vulkan is the latest graphical API for GPU's and is not meant for computing, it probably will not catch on in the scientific world.
+For now, CUDA is king, but similar to how DirectX only works on Windows machines, CUDA only works on nVidia cards. 
 If you have an AMD card, you are out of luck, unless you use CUDA's competitor: OpenCL!
 
 OpenCL stands for the Open Computing Language and is meant to allow users to access any type of hardware with the same language. 
 When using GPU hardware with OpenCL, you can expect similar (sometimes faster) performance with OpenCL when compared to CUDA; however, it comes at a cost of bulky boiler-plate code.
 The extra code is mainly associated with choosing appropriate devices to work on and with and managing the memory of those devices.
-In addition, it is clear that the OpenCL API is significantly influenced by the same design philosphy of OpenGL, so if you want to make games later, this might be a good exercise to go through!
+In addition, it is clear that the OpenCL API is significantly influenced by the same design philosophy of OpenGL, so if you want to make games later, this might be a good exercise to go through!
 
-First things first, when compiling OpenCL code, the compiler will be your standard c++ compiler \lstinline{g++} or \lstinline{clang++}. Because of this, you need to make sure you have the appropriate libraries installed (which your local supercomputer should!). On Tombo, this means using the same \lstinline{cuda\7.5.18} module you have been using. Compilation is a little different, though:
+First things first, when compiling OpenCL code, the compiler will be your standard C++ compiler \lstinline{g++} or \lstinline{clang++}. Because of this, you need to make sure you have the appropriate libraries installed (which your local supercomputer should!). On Tombo, this means using the same \lstinline{cuda\7.5.18} module you have been using. Compilation is a little different, though:
 
 \begin{lstlisting}
 g++ code.cpp -I/apps/free/cuda/7.5.18/include -L/apps/free/cuda/7.5.18/lib64 -lOpenCL
@@ -77,7 +78,7 @@ Now that we know how to compile, let's talk about how OpenCL differs from CUDA. 
 
 \end{lstlisting}
 
-Here, we are using \lstinline{__CL_ENABLE_EXCEPTIONS} so we may play some tricks later. Outside of the \lstinline{CL/cl.hpp} heading, though, everything should be good.
+Here, we are using \lstinline{__CL_ENABLE_EXCEPTIONS} so we can play some tricks later to determine errors. Outside of the \lstinline{CL/cl.hpp} heading, though, everything should be good.
 
 NOTE: We will be using the C++ API to OpenCL instead of C. Ultimately, the C++ API calls the C API, so it's the same thing. C++ just allows us to use some more interesting features of the language.
 
@@ -102,7 +103,7 @@ const char *kernelSource =                                   "\n" \
                                                              "\n" ;
 \end{lstlisting}
 
-Overall, the code is quite similar to the CUDA kernel, except that \lstinline{get_global_id(0)} is a little different than \lstinline{blockIdx.x * blickDim.x + threadIdx.x}. For OpenCL, 0, 1, and 2 are $x$, $y$, and $z$.
+Overall, the code is quite similar to the CUDA kernel, except that \lstinline{get_global_id(0)} is a little different than \lstinline{blockIdx.x * blockDim.x + threadIdx.x}. For OpenCL, 0, 1, and 2 are $x$, $y$, and $z$.
 
 Now for the main code...
 \begin{lstlisting}
@@ -128,11 +129,9 @@ Now for the main code...
     cl_int err = CL_SUCCESS;
 \end{lstlisting}
 
-Here there are some obvious differences with initialization. For one, we can use the C++ keyword \lstinline{new} which helps because we do not need to \lstinline{free()} the variables later. In addition, it's clear that OpenCL calls everything on the GPU a \lstinline{cl::Buffer}, to differentiate between what's on the CPU and GPU. 
+Here there are some obvious differences with initialization. For one, we can use the C++ keyword \lstinline{new} which helps because it's a little cleaner in some cases. Instead of \lstinline{free()} at the end, we will need to use \lstinline{delete()}. In addition, it's clear from the above code that OpenCL calls everything on the GPU a \lstinline{cl::Buffer}, to differentiate between what's on the CPU and GPU. 
 
-Now for the bulk of the code. Note we will have most of it in a \lstinline{try / catch} conditional. This is another pitfall of OpenCL: debugging's a pain!
-
-Firstly, we query for platforms and select the GPU.
+Now for the bulk of the code. Note we will have most of it in a \lstinline{try / catch} conditional. This is another pitfall of OpenCL: debugging's a pain! Firstly, we query for platforms and select the GPU.
 
 \begin{lstlisting}
     try{
@@ -154,7 +153,7 @@ Firstly, we query for platforms and select the GPU.
 
 \end{lstlisting}
 
-Next, we create a \lstinline{commandQueue}, which is basically the queue of commands to implement. The first command is writing the buffers.
+Next, we create a \lstinline{commandQueue}, which is basically the queue of commands to implement. This is not seen in CUDA code, but allows us to see in clearer terms what we are actually asking the GPU to do. The first command is writing the buffers.
 
 \begin{lstlisting}
         // Create command queue on first device
@@ -171,7 +170,7 @@ Next, we create a \lstinline{commandQueue}, which is basically the queue of comm
 
 \end{lstlisting}
 
-Finally, we build the kernel, set the arguments, run it and get the output.
+Then we build the kernel, set the arguments, run it and get the output.
 
 \begin{lstlisting}
         // Build kernel from source string
@@ -226,14 +225,15 @@ Finally, the catch statement looks like:
 At this point, you should have the vector $c$ ready to read, so do whatever you like to output it's contents and check that you did things correctly. Don't forget to delete the appropriate arrays!
 
 It's important to note here that you may need to look up the error code for OpenCL to figure out what the error means, which brings me back to my point before: OpenCL is a pain to debug!
-
 Still, it's open-source and can work on all hardware, so a few hassles here and there are not too big of a deal when compared to CUDA.
+
+\textbf{exercise:} using the above code snippets, get vector addition working with OpenCL.
 
 \newpage
 
 \section*{Matrix Transposition in CUDA}
 
-This problem seems straightforward: Take a matrix $A[i,j]$ and turn it into $A[j,i]$. In principle, this can be naively by just creating two separate index distributions and copying the contents of one array appropriately into the next array; however, when compared to a direct copy (no transpose), there will be a \textit{huge} drop in performance, and this is because you lose a property known as \textit{coalescence}. Take a look at the following code:
+This problem seems straightforward: Take a matrix $A[i,j]$ and turn it into $A[j,i]$. In principle, this can be naively by just creating two separate index distributions and copying the contents of one array appropriately into the next array (as shown below); however, when compared to a direct copy (no transpose), there will be a \textit{huge} drop in performance, and this is because you lose a property known as \textit{coalescence}. Take a look at the following code:
 
 \begin{lstlisting}
 ...
@@ -279,7 +279,7 @@ int main(){
 \end{lstlisting}
 
 It might appear that no matter what we do, our second index will not be coalesced! However, we can get around this with a shared-memory tile. 
-Now, here's where I get a little lazy. Everything from this point has been properly described here: \sloppy \url{https://devblogs.nvidia.com/parallelforall/efficient-matrix-transpose-cuda-cc/}, so here's the problem:
+Now, here's where I get a little lazy. Everything from this point has been properly described here: \sloppy \url{https://devblogs.nvidia.com/parallelforall/efficient-matrix-transpose-cuda-cc/}, so here's the exercise:
 
 \begin{itemize}
 \item Perform a simple matrix transpose in CUDA (like the CPU code above, just on the GPU)
@@ -292,7 +292,7 @@ Now, here's where I get a little lazy. Everything from this point has been prope
 
 One operation that has become incredibly efficient on GPU's is the FFT (Fast Fourier Transform). This algorithm lies at the heart of almost every field of research that requires signal processing. For this problem, we assume that you already have an understanding of how the Fourier Transform works and ultimately just want to implement it in code. For a more in-depth description, feel free to look at: \url{https://leios.gitbooks.io/algorithm-archive/content/chapters/computational_mathematics/FFT/cooley_tukey.html}.
 
-For the most part, the cuFFT library follows syntactically from the FFTW library and will require similar steps. In principle, the library allows for simple $n$-dimensional FFT's; however, depending on what you need, you may have to play some tricks. For this exercise, we will be focusing exclusively on 1D transforms, for 2D transforms, see the exercise on implementing a Sobel Filter with FFT's. For more complicated transforms, the full documentation for the cuFFT library can be found here: \url{http://docs.nvidia.com/cuda/cufft/index.html}.
+For the most part, the cuFFT library follows syntactically from the FFTW library and will require similar steps. In principle, the library allows for simple $n$-dimensional FFT's; however, depending on what you need, you may have to play some tricks. For the text of this exercise, we will be focusing exclusively on 1D transforms, but the exercise will involve 2D FFT's. For more complicated transforms, the full documentation for the cuFFT library can be found here: \url{http://docs.nvidia.com/cuda/cufft/index.html}.
 
 The cuFFT library has a special type called \lstinline{double2} or \lstinline{cufftDoubleComplex}, which is simply a complex number for FFT operations. For these values, \lstinline{number.x} will be the real component and \lstinline{number.y} will be the imaginary component. In principle, the cuFFT library works like this:
 \begin{enumerate}
@@ -346,13 +346,19 @@ int main(){
 
 \section*{Sobel Filter with FFT}
 
-Last time on \textit{GPU SkillPill X: The Final Pill}, we implemented a basic Sobel filter with a convolution using a window method. If using this method on an $m \times n$ image with a $p \times q$ filter, the complexity is $\sim \Theta(mnpq)$. By using the Fourier convolutional theorem, we can do the same convolution with a complexity of $\sim \Theta(mn(\log (m) + \log (n)))$, which is better for large filters. Also, using the convolutional theorem is better for data with dimensions higher than 2.
+Last time on \textit{GPU SkillPill X: The Final Pill}, we implemented a basic Sobel filter with a convolution using a window-based method. If using this method on an $m \times n$ image with a $p \times q$ filter, the complexity is $\sim \Theta(mnpq)$. By using the Fourier convolutional theorem, we can do the same convolution with a complexity of $\sim \Theta(mn(\log (m) + \log (n)))$, which is better for large filters. Also, using the convolutional theorem is better for data with dimensions higher than 2.
 
+Simply put, the convolutional theorem looks like:
+$$
+f * g = \mathscr{F}^{-1}(\mathscr{F}(f)\cdot\mathscr{F}(g))
+$$
+
+Using this and the previous exercise, apply the Sobel filter to the image from yesterday. Note: more information on the sobel filter can be found here: \url{https://en.wikipedia.org/wiki/Sobel_operator}.
 \newpage
 
 \section*{Parallel Reduction}
 
-This one is sometimes called ``Parallel Summation'', but it ultimately doesn't matter. Your job is to do the following:
+This is sometimes called ``Parallel Summation'', but it ultimately doesn't matter. Your job is to sum an array, like the following:
 
 \begin{lstlisting}
 int main(){
